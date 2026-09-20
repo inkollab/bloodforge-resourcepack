@@ -2,9 +2,9 @@
 """
 Builds the BloodForge resource pack.
 
-Generates an ANIMATED RAINBOW recolour of the vanilla netherite spear, keeping the original
-silhouette and shading, and assembles a pack that overrides nothing in vanilla — the weapons
-opt in through the item_model component, so ordinary netherite spears are untouched.
+Generates ANIMATED RAINBOW recolours of the vanilla netherite spear and mace, keeping the
+original silhouettes and shading, and assembles a pack that overrides nothing in vanilla — the
+weapons opt in through the item_model component, so ordinary spears and maces are untouched.
 
 No third-party dependencies: PIL is not available here, so PNG decode/encode is done directly.
 Vanilla item textures are palette-indexed (colour type 3); output is RGBA (colour type 6)
@@ -167,12 +167,13 @@ def main():
     write_json(os.path.join(OUT, "pack.mcmeta"), {
         "pack": {
             "pack_format": PACK_FORMAT,
-            "description": "BloodForge — rainbow God Spear"
+            "description": "BloodForge — rainbow God Spear and Blood Mace"
         }
     })
 
     for name, src_name in [("god_spear", "netherite_spear"),
-                           ("god_spear_in_hand", "netherite_spear_in_hand")]:
+                           ("god_spear_in_hand", "netherite_spear_in_hand"),
+                           ("blood_mace", "mace")]:
         w, h, px = read_png(os.path.join(tex_in, src_name + ".png"))
         nw, nh, npx = rainbowise(w, h, px)
         write_png(os.path.join(OUT, "assets/bloodforge/textures/item", name + ".png"),
@@ -202,6 +203,19 @@ def main():
     write_json(os.path.join(OUT, "assets/bloodforge/models/item/god_spear_in_hand.json"), {
         "parent": "minecraft:item/spear_in_hand",
         "textures": {"layer0": "bloodforge:item/god_spear_in_hand"}
+    })
+
+    # The mace is far simpler than the spear: vanilla's own items/mace.json is a plain
+    # model reference with no display_context select and no separate in-hand texture, so
+    # this mirrors that shape exactly. The parent MUST stay `handheld_mace` — that is what
+    # gives the mace its distinctive grip and swing arc; `generated` would flatten it into
+    # a signboard held edge-on.
+    write_json(os.path.join(OUT, "assets/bloodforge/items/blood_mace.json"), {
+        "model": {"type": "minecraft:model", "model": "bloodforge:item/blood_mace"}
+    })
+    write_json(os.path.join(OUT, "assets/bloodforge/models/item/blood_mace.json"), {
+        "parent": "minecraft:item/handheld_mace",
+        "textures": {"layer0": "bloodforge:item/blood_mace"}
     })
 
     zip_path = OUT + ".zip"
