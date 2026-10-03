@@ -164,47 +164,42 @@ def rainbowise(w, h, pixels):
     return w, h * FRAMES, out
 
 
-# ---------------------------------------------------------------- rib trim
+# ---------------------------------------------------------------- eye trim
 
-# The trim MATERIAL the God Axe's ribs are drawn in. Any vanilla palette name works (quartz,
-# gold, netherite, redstone, iron, amethyst...). Resin is the Creaking's orange, chosen by Roni on
-# 2026-10-02 over the first draft's bone-white quartz. Copper was explicitly NOT wanted.
-TRIM_MATERIAL = "resin"
+# The trim MATERIAL the God Axe's eye is drawn in. Any vanilla palette name works (quartz,
+# gold, netherite, redstone, iron, amethyst, resin...). Diamond, chosen by Roni on 2026-10-03.
+TRIM_MATERIAL = "diamond"
+
+# The eye, as (x, y) -> palette index (0 brightest .. 7 darkest), on the vanilla 16x16
+# NETHERITE axe. Hand-placed, not computed: an eye at this size is eleven pixels and every one
+# of them is a decision. Lids at 1 (glowing — Roni picked the bright-lid variant, #4 of four,
+# over the softer lid at 2), iris at 0, pupil at 7. Plus three diamond studs down the haft.
+EYE = {
+    (8, 3): 1, (9, 3): 1, (10, 3): 1,
+    (7, 4): 1, (8, 4): 0, (9, 4): 7, (10, 4): 0, (11, 4): 1,
+    (8, 5): 1, (9, 5): 1, (10, 5): 1,
+    (7, 8): 1, (5, 11): 1, (3, 13): 1,
+}
 
 
-def rib_trim(w, h, pixels, palette):
+def eye_trim(w, h, pixels, palette):
     """
-    Draws the RIB armor-trim idea onto the vanilla diamond axe: bone bars across the blade
-    like a rib cage, and the haft bound in bone on alternate rows like a spine.
+    Draws the EYE armor-trim idea onto the vanilla netherite axe: a 5x3 almond eye across the
+    blade and diamond studs down the haft.
 
-    Vanilla has no rib texture for ITEMS — the pattern exists only as worn armour — so this
-    is authored, not copied. What IS vanilla is the colour: `palette` is a real armour-trim
-    material palette (8 entries, bright to dark), and each replaced pixel takes the entry
-    matching its original brightness, so the axe's own shading survives under the bone.
+    Vanilla has no trim textures for ITEMS — trims exist only as worn armour — so this is
+    authored, not copied. What IS vanilla is the colour: `palette` is the real diamond
+    armour-trim palette (8 entries, bright to dark).
 
-    Ribs are HORIZONTAL on purpose. Diagonal ribs one pixel apart alias into a checkerboard
-    at 16x16, which reads as dither, not bone — tried and rejected on 2026-10-02.
+    History: the axe launched on 2026-10-02 as a DIAMOND axe with RIB trim in resin orange
+    (bars across the blade, bands on the haft). Replaced on 2026-10-03 at Roni's request.
     """
-    def lum(p):
-        return max(p[0], p[1], p[2])
-
-    def blade(p):   # the teal diamond head, minus its dark outline
-        return p[1] > p[0] + 40 and p[2] > p[0] + 40 and lum(p) > 120
-
-    def haft(p):    # the brown handle
-        return p[0] > p[2]
-
-    def bone(p):
-        v = lum(p)
-        i = 1 if v > 200 else 2 if v > 160 else 3 if v > 90 else 4 if v > 60 else 5
-        return palette[i][:3] + (p[3],)
-
     out = list(pixels)
-    for y in range(h):
-        for x in range(w):
-            p = pixels[y * w + x]
-            if p[3] and y % 2 == 1 and (blade(p) or haft(p)):
-                out[y * w + x] = bone(p)
+    for (x, y), shade in EYE.items():
+        # Every pixel must land on the axe itself. If vanilla ever redraws the netherite axe,
+        # this fails loudly at build time instead of painting eye pixels into thin air.
+        assert pixels[y * w + x][3], "eye pixel (%d,%d) is outside the axe" % (x, y)
+        out[y * w + x] = palette[shade][:3] + (255,)
     return out
 
 
@@ -227,7 +222,7 @@ def main():
     write_json(os.path.join(OUT, "pack.mcmeta"), {
         "pack": {
             "pack_format": PACK_FORMAT,
-            "description": "BloodForge — rainbow God Spear and Blood Mace, rib-trimmed God Axe"
+            "description": "BloodForge — rainbow God Spear and God Mace, eye-trimmed God Axe"
         }
     })
 
@@ -278,14 +273,14 @@ def main():
         "textures": {"layer0": "bloodforge:item/blood_mace"}
     })
 
-    # The God Axe: a static rib-trimmed diamond axe, not a rainbow. The `handheld` parent is
+    # The God Axe: a static eye-trimmed NETHERITE axe, not a rainbow. The `handheld` parent is
     # vanilla's own for every axe — it is what holds the head up and out instead of flat.
-    w, h, px = read_png(os.path.join(tex_in, "diamond_axe.png"))
+    w, h, px = read_png(os.path.join(tex_in, "netherite_axe.png"))
     _, _, palette = read_png(os.path.join(src, "assets/minecraft/textures/trims/color_palettes",
                                           TRIM_MATERIAL + ".png"))
     write_png(os.path.join(OUT, "assets/bloodforge/textures/item/god_axe.png"),
-              w, h, rib_trim(w, h, px, palette))
-    print("  texture %-20s %dx%d (rib trim, %s)" % ("god_axe", w, h, TRIM_MATERIAL))
+              w, h, eye_trim(w, h, px, palette))
+    print("  texture %-20s %dx%d (eye trim, %s)" % ("god_axe", w, h, TRIM_MATERIAL))
     write_json(os.path.join(OUT, "assets/bloodforge/items/god_axe.json"), {
         "model": {"type": "minecraft:model", "model": "bloodforge:item/god_axe"}
     })
