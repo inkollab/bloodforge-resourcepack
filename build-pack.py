@@ -10,7 +10,7 @@ No third-party dependencies: PIL is not available here, so PNG decode/encode is 
 Vanilla item textures are palette-indexed (colour type 3); output is RGBA (colour type 6)
 because animation frames need per-frame colour.
 """
-import json, struct, zlib, os, sys, hashlib, colorsys
+import json, struct, zlib, os, sys, hashlib, colorsys, random
 
 CLIENT_JAR = os.path.expanduser(
     "~/Library/Application Support/minecraft/versions/1.21.11/1.21.11.jar")
@@ -203,6 +203,72 @@ def eye_trim(w, h, pixels, palette):
     return out
 
 
+# ---------------------------------------------------------------- code rain
+
+# The Hacker Spear: a DIAMOND spear turned black-green, with bright code streaming along it from
+# the tip into the hand. Variant "B · Data stream", picked by Roni on 2026-10-10 from four
+# animated previews (Matrix-style straight-down rain, diamond-tip-only and a bright green head
+# were the others).
+#
+# At 16x16 there is no room for glyphs, so a "character" is one pixel: a near-white head with a
+# fading green trail, flickering as it falls the way the film's glyphs change.
+RAIN_TRAIL = [(225, 255, 225), (70, 255, 100), (35, 205, 70), (20, 150, 50), (12, 105, 35)]
+RAIN_SEED = 7             # fixes the lane layout so every rebuild is the same animation
+RAIN_FLICKER = 0.3        # chance per frame that a trail pixel dims a step: a glyph changing
+# The four darkest vanilla colours draw the spear's edge. The first render let rain run over
+# them and the head dissolved into a green blob, so the outline never streams.
+RAIN_OUTLINE_BELOW = 70
+
+
+def coderain(w, h, pixels, frames):
+    """
+    Stack `frames` vertically. Drops travel ALONG the spear, tip to hand, rather than down the
+    picture, so the flow still reads correctly once the in-hand model rotates the texture.
+
+    Position along the spear is t = the pixel's distance along the diagonal; a lane is one line
+    of pixels parallel to the shaft. Diagonal neighbours differ by 2 in t, so drops advance 2 per
+    frame (one pixel) and the cycle is 2*frames long, which is what makes the loop seamless.
+    """
+    vals = [max(p[:3]) / 255.0 for p in pixels if p[3] > 0]
+    lo, hi = min(vals), max(vals)
+    span = (hi - lo) or 1.0
+    # The GUI texture points its tip top-right, the in-hand texture top-left.
+    tip_left = pixels[0][3] > 0 or pixels[w][3] > 0
+    period = frames * 2
+    rnd = random.Random(RAIN_SEED)
+    lanes = {}
+    out = []
+    for frame in range(frames):
+        flicker = random.Random(RAIN_SEED * 1000 + frame)
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = pixels[y * w + x]
+                if a == 0:
+                    out.append((0, 0, 0, 0))
+                    continue
+                # Base: the vanilla shading, darkened onto a black-green terminal range.
+                norm = (max(r, g, b) / 255.0 - lo) / span
+                nr, ng, nb = colorsys.hsv_to_rgb(0.36, 0.9, 0.07 + 0.25 * norm)
+                colour = (int(nr * 255), int(ng * 255), int(nb * 255))
+                if tip_left:
+                    lane, t = x - y, x + y
+                else:
+                    lane, t = x + y, y - x + (w - 1)
+                if lane not in lanes:
+                    lanes[lane] = (rnd.randrange(period), 1 if rnd.random() < 0.55 else 2)
+                phase, drops = lanes[lane]
+                if max(r, g, b) >= RAIN_OUTLINE_BELOW:
+                    head = (frame * 2 + phase) % period
+                    behind = min(((head + k * period // drops - t) % period) // 2
+                                 for k in range(drops))
+                    if behind < len(RAIN_TRAIL):
+                        if behind > 0 and flicker.random() < RAIN_FLICKER:
+                            behind = min(behind + 1, len(RAIN_TRAIL) - 1)
+                        colour = RAIN_TRAIL[behind]
+                out.append(colour + (a,))
+    return w, h * frames, out
+
+
 # ---------------------------------------------------------------- build
 
 def write_json(path, obj):
@@ -222,7 +288,7 @@ def main():
     write_json(os.path.join(OUT, "pack.mcmeta"), {
         "pack": {
             "pack_format": PACK_FORMAT,
-            "description": "BloodForge — rainbow God Spear and God Mace, eye-trimmed God Axe"
+            "description": "BloodForge — rainbow God Spear and God Mace, eye-trimmed God Axe, code-rain Hacker Spear"
         }
     })
 
@@ -287,6 +353,40 @@ def main():
     write_json(os.path.join(OUT, "assets/bloodforge/models/item/god_axe.json"), {
         "parent": "minecraft:item/handheld",
         "textures": {"layer0": "bloodforge:item/god_axe"}
+    })
+
+    # The Hacker Spear mirrors the God Spear's two-texture structure exactly. Both textures loop
+    # in the same 1.6 s, so the rain crosses the spear at the same pace in the hand and the GUI:
+    # 16 frames x 2 ticks for the 16px icon, 32 frames x 1 tick for the 32px in-hand texture.
+    for name, src_name, frames, frametime in [
+            ("hacker_spear", "diamond_spear", 16, 2),
+            ("hacker_spear_in_hand", "diamond_spear_in_hand", 32, 1)]:
+        w, h, px = read_png(os.path.join(tex_in, src_name + ".png"))
+        nw, nh, npx = coderain(w, h, px, frames)
+        write_png(os.path.join(OUT, "assets/bloodforge/textures/item", name + ".png"), nw, nh, npx)
+        write_json(os.path.join(OUT, "assets/bloodforge/textures/item", name + ".png.mcmeta"),
+                   {"animation": {"frametime": frametime}})
+        print("  texture %-20s %dx%d -> %dx%d (%d frames, code rain)" % (name, w, h, nw, nh, frames))
+    write_json(os.path.join(OUT, "assets/bloodforge/items/hacker_spear.json"), {
+        "model": {
+            "type": "minecraft:select",
+            "property": "minecraft:display_context",
+            "cases": [{
+                "when": ["gui", "ground", "fixed", "on_shelf"],
+                "model": {"type": "minecraft:model", "model": "bloodforge:item/hacker_spear"}
+            }],
+            "fallback": {"type": "minecraft:model",
+                         "model": "bloodforge:item/hacker_spear_in_hand"}
+        },
+        "swap_animation_scale": 1.95
+    })
+    write_json(os.path.join(OUT, "assets/bloodforge/models/item/hacker_spear.json"), {
+        "parent": "minecraft:item/generated",
+        "textures": {"layer0": "bloodforge:item/hacker_spear"}
+    })
+    write_json(os.path.join(OUT, "assets/bloodforge/models/item/hacker_spear_in_hand.json"), {
+        "parent": "minecraft:item/spear_in_hand",
+        "textures": {"layer0": "bloodforge:item/hacker_spear_in_hand"}
     })
 
     zip_path = OUT + ".zip"

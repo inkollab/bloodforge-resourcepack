@@ -3,7 +3,7 @@
 Server-pushed resource pack for a private Minecraft 1.21.11 Paper server.
 
 Gives the **God Spear** and the **God Mace** animated rainbow textures, and the **God Axe** — a
-netherite axe — an eye armor-trim motif in diamond. The weapons opt in via the vanilla `item_model` item
+netherite axe — an eye armor-trim motif in diamond. The **Hacker Spear** gets green code rain. The weapons opt in via the vanilla `item_model` item
 component, so ordinary spears, maces and axes are untouched.
 
 The pack carries delight, never meaning: a player who declines it sees plain vanilla items and
@@ -16,6 +16,10 @@ can still read their tier from the weapon's name, upgrade sound and messages.
 - The God Axe is a static 16x16 netherite axe with a hand-placed eye and haft studs drawn in a
   real vanilla armor-trim palette (`TRIM_MATERIAL` in `build-pack.py`), keeping the vanilla
   silhouette exactly
+- The **Hacker Spear** is a diamond spear turned black-green, with animated code rain streaming
+  along it from tip to hand (`coderain` in `build-pack.py`); its outline never streams, so the
+  silhouette stays vanilla. 16 frames x 2 ticks in the GUI, 32 frames x 1 tick in hand — the
+  same 1.6s loop
 - The spear needs two textures (flat for the GUI, `spear_in_hand` for the held model); the
   mace needs one, and keeps the `handheld_mace` model parent for its grip and swing arc
 
